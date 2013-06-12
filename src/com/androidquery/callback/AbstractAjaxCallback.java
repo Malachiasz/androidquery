@@ -87,6 +87,7 @@ import android.app.Activity;
 import android.app.Dialog;
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.Bitmap.Config;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.util.Xml;
@@ -151,6 +152,9 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 	
 	private boolean uiCallback = true;
 	private int retry = 0;
+	
+	//Darek
+	private boolean showLowQualityImages;
 	
 	@SuppressWarnings("unchecked")
 	private K self(){
@@ -293,6 +297,18 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 		this.retry = retry;
 		return self();
 	}
+	
+	/**
+	 * Darek
+	 *
+	 * @param type the type
+	 * @return self
+	 */
+	public K showLowQualityImages(boolean showLowQualityImages){
+		this.showLowQualityImages = showLowQualityImages;
+		return self();
+	}
+
 	
 	/**
 	 * Set the transformer that transform raw data to desired type.
@@ -636,8 +652,17 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 		
 		if(data != null){
 			
-			if(type.equals(Bitmap.class)){			
-				return (T) BitmapFactory.decodeByteArray(data, 0, data.length);
+			if(type.equals(Bitmap.class)){	
+				
+				// Solution for out of memory error
+				// http://stackoverflow.com/a/8527745/2075875
+			    BitmapFactory.Options bfOptions=new BitmapFactory.Options();
+			    bfOptions.inDither=false;                     //Disable Dithering mode
+			    bfOptions.inPurgeable=true;                   //Tell to gc that whether it needs free memory, the Bitmap can be cleared
+			    bfOptions.inInputShareable=true;              //Which kind of reference will be used to recover the Bitmap data after being clear, when it will be used in the future
+			    bfOptions.inPreferredConfig =  (showLowQualityImages) ? Config.ARGB_4444 : Config.ARGB_8888;
+			    
+				return (T) BitmapFactory.decodeByteArray(data, 0, data.length, bfOptions);
 			}
 			
 			if(type.equals(JSONObject.class)){
