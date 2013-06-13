@@ -2140,7 +2140,8 @@ public abstract class AbstractAQuery<T extends AbstractAQuery<T>> implements Con
 	public File getCachedFile(String url){
 	
 		//return AQUtility.getExistedCacheByUrl(AQUtility.getCacheDir(getContext()), url);
-		File result = AQUtility.getExistedCacheByUrl(AQUtility.getCacheDir(getContext(), AQuery.CACHE_PERSISTENT), url);
+		File result = AQUtility.getExistedCacheByUrl(AQUtility.getCacheDir(getContext(), AQuery.CACHE_TEMPORARY), url);
+		if(result == null) result = AQUtility.getExistedCacheByUrl(AQUtility.getCacheDir(getContext(), AQuery.CACHE_PERSISTENT), url);
 		if(result == null) result = AQUtility.getExistedCacheByUrl(AQUtility.getCacheDir(getContext(), AQuery.CACHE_DEFAULT), url);
 		return result;
 	}

@@ -484,22 +484,34 @@ public class AQUtility {
 	
 	private static File cacheDir;
 	private static File pcacheDir;
+	private static File tcacheDir;
 	
-	public static File getCacheDir(Context context, int policy){
-		
-		if(policy == AQuery.CACHE_PERSISTENT){
-			
-			if(pcacheDir != null) return pcacheDir;
-			
+	public static File getCacheDir(Context context, int policy) {
+
+		if (policy == AQuery.CACHE_PERSISTENT) {
+
+			if (pcacheDir != null) return pcacheDir;
+
 			File cd = getCacheDir(context);
 			pcacheDir = new File(cd, "persistent");
 			pcacheDir.mkdirs();
-			
+
 			return pcacheDir;
-		}else{
+			
+		} else if (policy == AQuery.CACHE_TEMPORARY) {
+
+			if (tcacheDir != null) return tcacheDir;
+
+			File cd = getCacheDir(context);
+			tcacheDir = new File(cd, "temporary");
+			tcacheDir.mkdirs();
+
+			return pcacheDir;
+		} else {
+			
 			return getCacheDir(context);
 		}
-		
+
 	}
 	
 	public static File getCacheDir(Context context){			
@@ -621,9 +633,22 @@ public class AQUtility {
 			if(temp != null && temp.exists()){
 				cleanCache(temp.listFiles(), 0);
 			}
+			
+			//delete CACHE_TEMPORARY - it will be every time removed whenever cleanCache is invoked.
+			File cacheTemporaryDir = getCacheDir(context, AQuery.CACHE_TEMPORARY);
+			deleteRecursive(cacheTemporaryDir);
+			
 		}catch(Exception e){
 			AQUtility.report(e);
 		}
+	}
+	
+	private static void deleteRecursive(File fileOrDirectory) {
+	    if (fileOrDirectory.isDirectory())
+	        for (File child : fileOrDirectory.listFiles())
+	        	deleteRecursive(child);
+
+	    fileOrDirectory.delete();
 	}
 	
 	public static File getTempDir(){
