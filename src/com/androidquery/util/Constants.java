@@ -37,7 +37,7 @@ public interface Constants {
 	
 	public static final int CACHE_DEFAULT = 0;
 	public static final int CACHE_PERSISTENT = 1;
-	public static final int CACHE_TEMPORARY = 2;
+	public static final int CACHE_TEMPORARY = 2; // all content is removed when clean method is invoked
 	
 	public static final int METHOD_GET = 0;
 	public static final int METHOD_POST = 1;
