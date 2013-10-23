@@ -605,10 +605,15 @@ public class AQUtility {
 			File cacheDir = getCacheDir(context);
 			
 			Common task = new Common().method(Common.CLEAN_CACHE, cacheDir, triggerSize, targetSize);
-			
 			ScheduledExecutorService exe = getFileStoreExecutor();	
-			
 			exe.schedule(task, 0, TimeUnit.MILLISECONDS);
+			
+			// Added for security reason, so persistent cache doesn't grow infinitely. 
+			// Because of that it's not persistent any more, but maximum triggerSize of standart cache
+			File persistentCacheDir = getCacheDir(context, AQuery.CACHE_PERSISTENT);
+			
+			Common task2 = new Common().method(Common.CLEAN_CACHE, persistentCacheDir, triggerSize, targetSize);
+			exe.schedule(task2, 0, TimeUnit.MILLISECONDS);
 			
 		}catch(Exception e){
 			AQUtility.report(e);
