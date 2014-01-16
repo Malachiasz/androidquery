@@ -325,7 +325,8 @@ public class Common implements Comparator<File>, Runnable, OnClickListener, OnLo
 		if(parent instanceof ExpandableListView){
 			packed = ExpandableListView.getPackedPositionForChild(groupPosition, childPosition);
 		}
-		convertView.setTag(AQuery.TAG_NUM, packed);
+		if (convertView != null)
+			convertView.setTag(AQuery.TAG_NUM, packed);
 		
 		//TODO add draw count and skip drawing list if possible
 		
