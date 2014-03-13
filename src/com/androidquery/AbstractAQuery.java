@@ -19,6 +19,7 @@ package com.androidquery;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Constructor;
 import java.nio.channels.FileChannel;
 import java.util.Iterator;
@@ -27,6 +28,8 @@ import java.util.WeakHashMap;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHost;
+import org.apache.http.entity.StringEntity;
+import org.json.JSONObject;
 
 import android.app.Activity;
 import android.app.Dialog;
@@ -54,6 +57,7 @@ import android.widget.AbsListView.OnScrollListener;
 import android.widget.Adapter;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
+import android.widget.AdapterView.OnItemLongClickListener;
 import android.widget.AdapterView.OnItemSelectedListener;
 import android.widget.BaseAdapter;
 import android.widget.Button;
@@ -278,7 +282,7 @@ public abstract class AbstractAQuery<T extends AbstractAQuery<T>> implements Con
 	
 	
 	@SuppressWarnings("unchecked")
-	private T self(){
+	protected T self(){
 		return (T) this;
 	}
 
@@ -531,9 +535,9 @@ public abstract class AbstractAQuery<T extends AbstractAQuery<T>> implements Con
 	}
 	
 	/**
-	 * Set the text color of a TextView.
+	 * Set the text color of a TextView. Note that it's not a color resource id.
 	 *
-	 * @param color the color
+	 * @param color color code in ARGB
 	 * @return self
 	 */
 	public T textColor(int color){
@@ -544,6 +548,17 @@ public abstract class AbstractAQuery<T extends AbstractAQuery<T>> implements Con
 		}
 		return self();
 	}
+	
+	/**
+     * Set the text color of a TextView from  a color resource id.
+     *
+     * @param color color resource id
+     * @return self
+     */
+    public T textColorId(int id){
+        
+        return textColor(getContext().getResources().getColor(id));
+    }
 	
 	
 	/**
@@ -1081,7 +1096,7 @@ public abstract class AbstractAQuery<T extends AbstractAQuery<T>> implements Con
 	/**
 	 * Set view background color.
 	 *
-	 * @param color
+	 * @param color color code in ARGB
 	 * @return self
 	 */
 	public T backgroundColor(int color){
@@ -1092,6 +1107,21 @@ public abstract class AbstractAQuery<T extends AbstractAQuery<T>> implements Con
 		
 		return self();
 	}
+	
+	/**
+     * Set view background color.
+     *
+     * @param color color code in resource id
+     * @return self
+     */
+    public T backgroundColorId(int colorId){
+        
+        if(view != null){       
+            view.setBackgroundColor(getContext().getResources().getColor(colorId));     
+        }
+        
+        return self();
+    }
 	
 	/**
 	 * Notify a ListView that the data of it's adapter is changed.
@@ -1445,6 +1475,42 @@ public abstract class AbstractAQuery<T extends AbstractAQuery<T>> implements Con
 		
 			AdapterView<?> alv = (AdapterView<?>) view;
 			alv.setOnItemClickListener(listener);
+			
+		
+		}
+		
+		return self();
+		
+	}	
+	
+	/**
+	 * Register a callback method for when an item is long clicked in the ListView. Method must have signature of method(AdapterView<?> parent, View v, int pos, long id).
+	 *
+	 * @param handler The handler that has the public callback method.
+	 * @param method The method name of the callback.
+	 * @return self
+	 */
+	public T itemLongClicked(Object handler, String method){
+		
+		Common common = new Common().forward(handler, method, true, ON_ITEM_SIG);
+		return itemLongClicked(common);
+		
+	}
+	
+	
+	/**
+	 * Register a callback method for when an item is long clicked in the ListView.
+	 *
+	 * @param listener The callback method.
+	 * @return self
+	 */
+	public T itemLongClicked(OnItemLongClickListener listener){
+		
+		if(view instanceof AdapterView){
+		
+			AdapterView<?> alv = (AdapterView<?>) view;
+			alv.setOnItemLongClickListener(listener);
+			
 		
 		}
 		
@@ -2059,6 +2125,39 @@ public abstract class AbstractAQuery<T extends AbstractAQuery<T>> implements Con
 		return ajax(callback);
 		
 	}
+	
+	public <K> T post(String url, String contentHeader, HttpEntity entity, Class<K> type, AjaxCallback<K> callback){
+        
+        callback.url(url).type(type).method(AQuery.METHOD_POST).header("Content-Type", contentHeader).param(AQuery.POST_ENTITY, entity);     
+        return ajax(callback);
+        
+    }
+	
+	public <K> T post(String url, JSONObject jo, Class<K> type, AjaxCallback<K> callback){
+	    
+	    try{
+	    
+    	    StringEntity entity = new StringEntity(jo.toString(), "UTF-8");
+    	    return post(url, "application/json", entity, type, callback);
+	    }catch(UnsupportedEncodingException e){
+	        throw new IllegalArgumentException(e);
+	    }
+	    
+	    
+	}
+	
+	public <K> T put(String url, JSONObject jo, Class<K> type, AjaxCallback<K> callback){
+        
+        try{
+        
+            StringEntity entity = new StringEntity(jo.toString(), "UTF-8");
+            return put(url, "application/json", entity, type, callback);
+        }catch(UnsupportedEncodingException e){
+            throw new IllegalArgumentException(e);
+        }
+        
+        
+    }
 	
 	
 	

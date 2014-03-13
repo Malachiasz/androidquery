@@ -264,6 +264,12 @@ public class BitmapAjaxCallback extends AbstractAjaxCallback<Bitmap, BitmapAjaxC
 		return result;
 	}
 	
+	private static boolean isInputSharable(){
+		AQUtility.debug("level", AQuery.SDK_INT);
+		return AQuery.SDK_INT < 19;
+		
+	}
+	
 	private static Bitmap decodeFile(String path, BitmapFactory.Options options, boolean rotate){
 		
 		Bitmap result = null;
@@ -272,7 +278,7 @@ public class BitmapAjaxCallback extends AbstractAjaxCallback<Bitmap, BitmapAjaxC
 			options = new Options();
 		}
 		
-		options.inInputShareable = true;
+		options.inInputShareable = isInputSharable();
 		options.inPurgeable = true;
 		
 		FileInputStream fis = null;
@@ -286,6 +292,7 @@ public class BitmapAjaxCallback extends AbstractAjaxCallback<Bitmap, BitmapAjaxC
 			if(result != null && rotate){
 				result = rotate(path, result);
 			}
+			
 			
 		}catch(IOException e){
 			AQUtility.report(e);
@@ -485,7 +492,17 @@ public class BitmapAjaxCallback extends AbstractAjaxCallback<Bitmap, BitmapAjaxC
 			if(status.getCode() != 200){
 				invalid = true;
 			}
+			
+						
+			//invalidating the file if it's not an image, could be caused by proxy returning 200 with html data
+			if(status.getSource() == AjaxStatus.NETWORK && file != null){
+			    AQUtility.debug("invalid bm from net");
+			    file.delete();
+			}
+			
 		}
+		    
+		
 		
 		
 		return bm;

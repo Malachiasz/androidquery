@@ -28,6 +28,8 @@ import java.io.OutputStream;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
 import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Date;
@@ -56,6 +58,7 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.client.params.ClientPNames;
 import org.apache.http.client.protocol.ClientContext;
 import org.apache.http.conn.HttpHostConnectException;
 import org.apache.http.conn.params.ConnManagerParams;
@@ -114,6 +117,7 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 	private static int NETWORK_POOL = 4;
 	private static boolean GZIP = true;
 	private static boolean REUSE_CLIENT = true;
+	private static boolean SIMULATE_ERROR = false;
 	
 	private Class<T> type;
 	private Reference<Object> whandler;
@@ -123,9 +127,9 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 	
 	private String url;
 	private String networkUrl;
-	private Map<String, Object> params;
-	private Map<String, String> headers;
-	private Map<String, String> cookies;
+	protected Map<String, Object> params;
+	protected Map<String, String> headers;
+	protected Map<String, String> cookies;
 	
 	private Transformer transformer;
 	
@@ -134,7 +138,7 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 	private int policy = Constants.CACHE_DEFAULT;
 	private File cacheDir;
 	private File targetFile;
-	private AccountHandle ah;
+	protected AccountHandle ah;
 	
 	protected AjaxStatus status;
 	
@@ -142,6 +146,7 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 	protected boolean memCache;
 	private boolean refresh;
 	private int timeout = 0;
+	private boolean redirect = true;
 	
 	private long expire;
 	private String encoding = "UTF-8";
@@ -197,6 +202,15 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 	public static void setGZip(boolean gzip){
 		GZIP = gzip;
 	}
+	
+	/**
+     * Set to true to simulate network error.
+     *
+     * @param error
+     */
+	public static void setSimulateError(boolean error){
+	    SIMULATE_ERROR = error;
+    }
 	
 	/**
 	 * Sets the default static transformer. This transformer should be stateless.
@@ -292,6 +306,18 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 		this.timeout = timeout;
 		return self();
 	}
+	
+	/**
+     * Set if http requests should follow redirect. Default is true.
+     * 
+     * @param redirect follow redirect
+     * @return self
+     */
+	
+	public K redirect(boolean redirect){
+        this.redirect = redirect;
+        return self();
+    }
 	
 	public K retry(int retry){
 		this.retry = retry;
@@ -404,6 +430,18 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 	}
 	
 	/**
+     * Set the header fields for the http request.
+     *
+     * @param headers the header
+     * @return self
+     */
+    
+    public K headers(Map<String, String> headers){
+        this.headers = (Map<String, String>) headers;
+        return self();
+    }
+	
+	/**
 	 * Set the cookies for the http request.
 	 *
 	 * @param name the name
@@ -417,6 +455,18 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 		cookies.put(name, value);
 		return self();
 	}	
+	
+    /**
+     * Set cookies for the http request.
+     *
+     * @param cookies the cookies
+     * @return self
+     */
+    
+    public K cookies(Map<String, String> cookies){
+        this.cookies = (Map<String, String>) cookies;
+        return self();
+    }	
 	
 	/**
 	 * Set the encoding used to parse the response.
@@ -437,6 +487,30 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 		proxy = new HttpHost(host, port);
 		return self();
 	}
+	
+	public K proxy(String host, int port, String user, String password){
+	    
+	    proxy(host, port);
+	    
+	    String authHeader = makeAuthHeader(user, password);	  
+	    
+	    AQUtility.debug("proxy auth", authHeader);
+	    
+	    return header("Proxy-Authorization", authHeader);
+	    
+	}
+	
+	private static String makeAuthHeader(String username, String password){
+        
+        String cred = username + ":" + password;
+        byte[] data = cred.getBytes();
+        
+        String auth = "Basic " + new String(AQUtility.encode64(data, 0, data.length));
+        
+        return auth;
+        
+    }
+	
 	
 	public K targetFile(File file){
 		this.targetFile = file;
@@ -528,6 +602,7 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 		}else{
 			skip(url, result, status);
 		}
+		
 		
 		filePut();
 		
@@ -711,20 +786,6 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 				return (T) result;
 			}
 			
-			/*
-			if(type.equals(XmlDom.class)){
-				
-				XmlDom result = null;
-				
-				try {    
-					result = new XmlDom(data);
-				} catch (Exception e) {	  		
-					AQUtility.debug(e);
-				}
-				
-				return (T) result; 
-			}
-			*/
 			
 			if(type.equals(byte[].class)){
 				return (T) data;
@@ -966,8 +1027,15 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 	public void failure(int code, String message){
 		
 		if(status != null){
-			status.code(code).message(message);
-			callback();
+			status.code(code).message(message).done();
+			
+			if(uiCallback){
+                AQUtility.post(this);
+            }else{
+                afterWork();
+            }
+			
+			//callback();
 		}
 		
 	}
@@ -1125,6 +1193,19 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 										
 			data = status.getData();
 			
+		}catch(IOException e){
+		
+		    AQUtility.debug("IOException");
+		    
+		    //work around for IOException when 401 is returned
+		    //reference: http://stackoverflow.com/questions/11735636/how-to-get-401-response-without-handling-it-using-try-catch-in-android
+		    String message = e.getMessage();
+		    if(message != null && message.contains("No authentication challenges found")){
+		        status.code(401).message(message);
+		    }else{
+		        status.code(AjaxStatus.NETWORK_ERROR).message("network error");
+		    }
+		
 		}catch(Exception e){
 			AQUtility.debug(e);
 			status.code(AjaxStatus.NETWORK_ERROR).message("network error");
@@ -1190,7 +1271,7 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 	
 	
 	private void filePut(){
-			
+		
 		if(result != null && fileCache){
 			
 			byte[] data = status.getData();
@@ -1200,7 +1281,6 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 				
 					File file = getCacheFile();
 					if(!status.getInvalid()){	
-						//AQUtility.debug("write", url);
 						filePut(url, result, file, data);
 					}else{
 						if(file.exists()){
@@ -1214,6 +1294,15 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 			}
 			
 			status.data(null);
+		}else if(status.getCode() == AjaxStatus.TRANSFORM_ERROR){
+		    
+		    File file = getCacheFile();
+		    
+		    if(file.exists()){
+                file.delete();
+                AQUtility.debug("invalidated cache due to transform error");
+		    }
+		    
 		}
 	}
 	
@@ -1286,9 +1375,9 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 		
 		
 		if(Constants.METHOD_DELETE == method){
-			httpDelete(url, headers, status);
+			httpDelete(url, status);
 		}else if(Constants.METHOD_PUT == method){
-			httpPut(url, headers, params, status);
+			httpPut(url, params, status);
 		}else{
 			
 			if(Constants.METHOD_POST == method && params == null){
@@ -1296,12 +1385,12 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 			}
 			
 			if(params == null){
-				httpGet(url, headers, status);	
+				httpGet(url, status);	
 			}else{
 				if(isMultiPart(params)){
-					httpMulti(url, headers, params, status);
+					httpMulti(url, params, status);
 				}else{
-					httpPost(url, headers, params, status);
+					httpPost(url, params, status);
 				}
 				
 			}
@@ -1390,50 +1479,50 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 		return url;
 	}
 	
-	private void httpGet(String url, Map<String, String> headers, AjaxStatus status) throws IOException{
+	private void httpGet(String url, AjaxStatus status) throws IOException{
 		
 		AQUtility.debug("get", url);
 		url = patchUrl(url);
 		
 		HttpGet get = new HttpGet(url);
 				
-		httpDo(get, url, headers, status);
+		httpDo(get, url, status);
 		
 	}
 	
-	private void httpDelete(String url, Map<String, String> headers, AjaxStatus status) throws IOException{
+	private void httpDelete(String url, AjaxStatus status) throws IOException{
 		
 		AQUtility.debug("get", url);
 		url = patchUrl(url);
 		
 		HttpDelete del = new HttpDelete(url);
 		
-		httpDo(del, url, headers, status);
+		httpDo(del, url, status);
 		
 	}
 	
-	private void httpPost(String url, Map<String, String> headers, Map<String, Object> params, AjaxStatus status) throws ClientProtocolException, IOException{
+	private void httpPost(String url, Map<String, Object> params, AjaxStatus status) throws ClientProtocolException, IOException{
 		
 		AQUtility.debug("post", url);
 		
 		HttpEntityEnclosingRequestBase req = new HttpPost(url);
 		
-		httpEntity(url, req, headers, params, status);
+		httpEntity(url, req, params, status);
 		
 	}
 	
-	private void httpPut(String url, Map<String, String> headers, Map<String, Object> params, AjaxStatus status) throws ClientProtocolException, IOException{
+	private void httpPut(String url, Map<String, Object> params, AjaxStatus status) throws ClientProtocolException, IOException{
 		
 		AQUtility.debug("put", url);
 		
 		HttpEntityEnclosingRequestBase req = new HttpPut(url);
 		
-		httpEntity(url, req, headers, params, status);
+		httpEntity(url, req, params, status);
 		
 	}
 	
 	
-	private void httpEntity(String url, HttpEntityEnclosingRequestBase req, Map<String, String> headers, Map<String, Object> params, AjaxStatus status) throws ClientProtocolException, IOException{
+	private void httpEntity(String url, HttpEntityEnclosingRequestBase req, Map<String, Object> params, AjaxStatus status) throws ClientProtocolException, IOException{
 		
 		//This setting seems to improve post performance
 		//http://stackoverflow.com/questions/3046424/http-post-requests-using-httpclient-take-2-seconds-why
@@ -1466,7 +1555,7 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 		}
 		
 		req.setEntity(entity);
-		httpDo(req, url, headers, status);
+		httpDo(req, url, status);
 		
 		
 	}
@@ -1492,7 +1581,24 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 		client = null;
 		
 	}
+	/*
+	private static HttpHost phost;
+	private static String pheader;
 	
+	
+	public static void setProxy(String host, int port, String user, String password){
+	    
+	    if(host == null || host.isEmpty()) phost = null;
+	    else phost = new HttpHost(host, port);
+	    
+	    //String authHeader = makeAuthHeader(user, password);      
+        //return header("Proxy-Authorization", authHeader);
+	    
+	    if(user == null || user.isEmpty()) pheader = null;
+	    else pheader = makeAuthHeader(user, password);
+	    
+	}
+	*/
 	
 	private static DefaultHttpClient client;
 	private static DefaultHttpClient getClient(){
@@ -1548,12 +1654,27 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 		return response;
 	}
 	
+	private static ProxyHandle proxyHandle;
 	
-	private void httpDo(HttpUriRequest hr, String url, Map<String, String> headers, AjaxStatus status) throws ClientProtocolException, IOException{
+	public static void setProxyHandle(ProxyHandle handle){
+	    proxyHandle = handle;
+	}
+	
+	
+	private void httpDo(HttpUriRequest hr, String url, AjaxStatus status) throws ClientProtocolException, IOException{
 		
+	    DefaultHttpClient client = getClient();
+	    
+	    if(proxyHandle != null){
+	        proxyHandle.applyProxy(this, hr, client);
+	    }
+	    
 		if(AGENT != null){
 			hr.addHeader("User-Agent", AGENT);
+        }else if(AGENT == null && GZIP){
+            hr.addHeader("User-Agent", "gzip");
         }
+	
 		
 		if(headers != null){
         	for(String name: headers.keySet()){
@@ -1562,26 +1683,34 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
                
 		}
 		
-		if(GZIP && (headers == null || !headers.containsKey("Accept-Encoding"))){
+		if(GZIP && (headers == null || !headers.containsKey("Accept-Encoding"))){		   
 			hr.addHeader("Accept-Encoding", "gzip");
 		}
 			
+		if(ah != null){
+            ah.applyToken(this, hr);
+        }
+		
 		String cookie = makeCookie();
 		if(cookie != null){
 			hr.addHeader("Cookie", cookie);
 		}
 		
-		if(ah != null){
-			ah.applyToken(this, hr);
-		}
 		
-		DefaultHttpClient client = getClient();
 		
 		HttpParams hp = hr.getParams();
+		
+		
 		if(proxy != null) hp.setParameter(ConnRoutePNames.DEFAULT_PROXY, proxy);
+		
+		
 		if(timeout > 0){
 			hp.setParameter(CoreConnectionPNames.CONNECTION_TIMEOUT, timeout);
 			hp.setParameter(CoreConnectionPNames.SO_TIMEOUT, timeout);
+		}
+		
+		if(!redirect){
+		    hp.setBooleanParameter(ClientPNames.HANDLE_REDIRECTS, false);
 		}
 		
 		HttpContext context = new BasicHttpContext(); 	
@@ -1593,6 +1722,10 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 		if(abort){
 			throw new IOException("Aborted");
 		}
+		
+		if(SIMULATE_ERROR){
+            throw new IOException("Simulated Error");
+        }
 		
 		HttpResponse response = null;
 		
@@ -1625,6 +1758,7 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
         HttpEntity entity = response.getEntity();
        
         File file = null;
+        File tempFile = null;
         
         if(code < 200 || code >= 300){     
         	
@@ -1667,19 +1801,26 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 		        if(file == null){
 		        	os = new PredefinedBAOS(size);
 		        }else{
-		        	file.createNewFile();
-		        	os = new BufferedOutputStream(new FileOutputStream(file));
+		        	//file.createNewFile();
+		        	tempFile = makeTempFile(file);
+		            os = new BufferedOutputStream(new FileOutputStream(tempFile));
 		        }
 		        
 		        is = entity.getContent();
-				if("gzip".equalsIgnoreCase(getEncoding(entity))){
+		        
+		        boolean gzip = "gzip".equalsIgnoreCase(getEncoding(entity));
+		        
+				if(gzip){
 					is = new GZIPInputStream(is);
 				}
 		        
-		        copy(is, os, (int) entity.getContentLength());
+				int contentLength = (int) entity.getContentLength();
+				
+				//AQUtility.debug("gzip response", entity.getContentEncoding());
+				
+		        copy(is, os, contentLength, tempFile, file);
 		        
-		        
-		        os.flush();
+		        //os.flush();
 		        
 		        if(file == null){
 		        	data = ((PredefinedBAOS) os).toByteArray();
@@ -1718,6 +1859,50 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 		
 	}
 	
+	private void copy(InputStream is, OutputStream os, int max, File tempFile, File destFile) throws IOException{
+	    
+	    //if no file operation is involved
+	    if(destFile == null){
+	        copy(is, os, max);
+	        return;
+	    }
+	    
+	    try{
+	    
+	        copy(is, os, max);
+	        is.close();
+	        os.close();
+	        
+	        //copy success, rename file to destination
+	        //AQUtility.time("rename");
+	        tempFile.renameTo(destFile);
+	        //AQUtility.timeEnd("rename", 0);
+	    }catch(IOException e){
+	        
+	        AQUtility.debug("copy failed, deleting files");
+	        
+	        //copy is a failure, delete everything
+	        tempFile.delete();
+	        destFile.delete();
+	        
+	        AQUtility.close(is);
+	        AQUtility.close(os);
+	        
+	        throw e;
+	    }
+	    
+	    
+	}
+	
+	private File makeTempFile(File file) throws IOException{
+	    
+	    File temp = new File(file.getAbsolutePath() + ".tmp");
+	    temp.createNewFile();
+	    
+	    return temp;
+	    
+	}
+	
 	private void copy(InputStream is, OutputStream os, int max) throws IOException{
 		
 
@@ -1739,31 +1924,6 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 		
 	}
 	
-	
-	/*
-	private void copy(InputStream is, OutputStream os, String encoding, int max) throws IOException{
-		
-		if("gzip".equalsIgnoreCase(encoding)){
-			is = new GZIPInputStream(is);
-		}
-		
-		Object o = null;
-		
-		if(progress != null){
-			o = progress.get();
-		}
-		
-		Progress p = null;
-		
-		if(o != null){
-			p = new Progress(o); 
-		}
-		
-		AQUtility.copy(is, os, max, p);
-		
-		
-	}
-	*/
 	
 	/**
 	 * Set the authentication type of this request. This method requires API 5+.
@@ -1896,17 +2056,30 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 		return false;
 	}
 	
-	private void httpMulti(String url, Map<String, String> headers, Map<String, Object> params, AjaxStatus status) throws IOException {
+	private void httpMulti(String url, Map<String, Object> params, AjaxStatus status) throws IOException {
 
 		AQUtility.debug("multipart", url);
 		
 		HttpURLConnection conn = null;
 		DataOutputStream dos = null;
 		
-		
 		URL u = new URL(url);
-		conn = (HttpURLConnection) u.openConnection();
-
+		
+		Proxy py = null;
+		
+		if(proxy != null){
+		    AQUtility.debug("proxy", proxy);
+		    py = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(proxy.getHostName(), proxy.getPort()));
+		}else if(proxyHandle != null){
+		    py = proxyHandle.makeProxy(this);
+		}
+		
+		if(py == null){
+		    conn = (HttpURLConnection) u.openConnection();
+		}else{
+		    conn = (HttpURLConnection) u.openConnection(py);
+		}
+		
 		conn.setInstanceFollowRedirects(false);
 		
 		conn.setConnectTimeout(NET_TIMEOUT * 4);
@@ -1934,6 +2107,7 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 			ah.applyToken(this, conn);
 		}
 		
+		
 		dos = new DataOutputStream(conn.getOutputStream());
 
 		for(Map.Entry<String, Object> entry: params.entrySet()){
@@ -1950,7 +2124,9 @@ public abstract class AbstractAjaxCallback<T, K> implements Runnable{
 		
 		conn.connect();
 		
+		
         int code = conn.getResponseCode();
+        
         String message = conn.getResponseMessage();
         
         byte[] data = null;
