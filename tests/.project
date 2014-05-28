@@ -34,17 +34,17 @@
 		<link>
 			<name>aquery</name>
 			<type>2</type>
-			<location>C:/git/androidquery.git/src</location>
+			<location>/Applications/eclipse/Eclipse.app/Contents/MacOS/C::/git/androidquery.git/src</location>
 		</link>
 		<link>
 			<name>auth</name>
 			<type>2</type>
-			<location>C:/git/androidquery.git/auth</location>
+			<location>/Applications/eclipse/Eclipse.app/Contents/MacOS/C::/git/androidquery.git/auth</location>
 		</link>
 		<link>
 			<name>beta</name>
 			<type>2</type>
-			<location>C:/git/androidquery.git/beta</location>
+			<location>/Applications/eclipse/Eclipse.app/Contents/MacOS/C::/git/androidquery.git/beta</location>
 		</link>
 	</linkedResources>
 </projectDescription>
