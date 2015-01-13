@@ -19,3 +19,25 @@ local.properties
 proguard-dump.txt
 /assets
 /target
+
+# Android Studio
+out/
+.idea/
+.gradle
+/*/local.properties
+/*/out
+/.idea/workspace.xml
+/.idea/libraries
+.DS_Store
+/build
+*/build
+*/production
+*/local.properties
+*/out
+/*/*/build
+/*/*/production
+*.iml
+*.iws
+*.ipr
+*~
+*.swp
